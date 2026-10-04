@@ -32,7 +32,7 @@ export interface DailyRecord {
   updatedAt: number; // timestamp
 }
 
-export type DateRangeType = '3' | '4' | '7' | '14' | '30' | 'month';
+export type DateRangeType = '1' | '3' | '4' | '7' | '14' | '30' | 'month';
 
 export type ThemeMode = 'dark' | 'light';
 export type TileStyle = 'translucent' | 'solid' | 'minimal';

@@ -9,7 +9,8 @@ import {
   Sun, 
   Moon, 
   ChevronRight,
-  Sparkles
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { ThemeMode } from '../types';
 
@@ -20,6 +21,8 @@ interface SidebarProps {
   onToggleTheme: () => void;
   onOpenMemberShare: () => void;
   onOpenWhatsAppModal: () => void;
+  isAdminUnlocked: boolean;
+  onPromptAdminPassword: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleTheme,
   onOpenMemberShare,
   onOpenWhatsAppModal,
+  isAdminUnlocked,
+  onPromptAdminPassword,
 }) => {
   const isLight = theme === 'light';
 
@@ -36,7 +41,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'matrix', label: 'Upload Matrix', icon: Grid },
     { id: 'creators', label: 'Creators', icon: Users, action: onOpenMemberShare },
-    { id: 'campaigns', label: 'Campaigns', icon: BarChart2 },
+    { 
+      id: 'admin', 
+      label: 'Admin Panel', 
+      icon: ShieldCheck, 
+      badge: isAdminUnlocked ? 'Unlocked' : 'WIN2026',
+      badgeColor: isAdminUnlocked ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400',
+      action: () => {
+        if (isAdminUnlocked) {
+          onTabChange('admin');
+        } else {
+          onPromptAdminPassword();
+        }
+      } 
+    },
     { id: 'reports', label: 'Reports', icon: FileText, action: onOpenWhatsAppModal },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -75,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onTabChange(item.id);
                   }
                 }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                   isActive
                     ? isLight
                       ? 'bg-blue-50/90 text-blue-600 shadow-2xs'
@@ -85,8 +103,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? (isLight ? 'text-blue-600' : 'text-zinc-100') : 'text-zinc-500'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 ${
+                    isActive 
+                      ? (isLight ? 'text-blue-600' : 'text-zinc-100') 
+                      : item.id === 'admin'
+                        ? 'text-amber-400'
+                        : 'text-zinc-500'
+                  }`} />
+                  <span>{item.label}</span>
+                </div>
+
+                {item.badge && (
+                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${item.badgeColor || 'bg-zinc-800 text-zinc-400'}`}>
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

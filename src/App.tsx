@@ -28,6 +28,8 @@ import { Sidebar } from './components/Sidebar';
 import { DashboardHeader } from './components/DashboardHeader';
 import { KpiSummaryStrip } from './components/KpiSummaryStrip';
 import { UploadMatrix } from './components/UploadMatrix';
+import { AdminPanel } from './components/AdminPanel';
+import { AdminPasswordModal } from './components/AdminPasswordModal';
 import { DayInspectorModal } from './components/DayInspectorModal';
 import { WhatsAppModal } from './components/WhatsAppModal';
 import { AccountManagementModal } from './components/AccountManagementModal';
@@ -41,6 +43,7 @@ const STORAGE_KEY_CAMPAIGNS = 'focusflow_campaigns_v1';
 const STORAGE_KEY_RECORDS = 'focusflow_records_v1';
 const STORAGE_KEY_THEME = 'focusflow_theme_v1';
 const STORAGE_KEY_TILE_STYLE = 'focusflow_tilestyle_v1';
+const STORAGE_KEY_ADMIN_AUTH = 'focusflow_admin_auth_v1';
 
 export default function App() {
   // 1. Core State with LocalStorage Persistence
@@ -99,6 +102,17 @@ export default function App() {
     }
   });
 
+  // Admin Authentication State
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(STORAGE_KEY_ADMIN_AUTH) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [adminPasswordModalOpen, setAdminPasswordModalOpen] = useState(false);
+
   // Save changes to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_EMPLOYEES, JSON.stringify(employees));
@@ -131,7 +145,7 @@ export default function App() {
 
   // 2. Navigation & Filter State
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [range, setRange] = useState<DateRangeType>('4'); // Default Last 4 Days!
+  const [range, setRange] = useState<DateRangeType>('4'); // Default Last 4 Days
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -204,14 +218,51 @@ export default function App() {
   const handleAddAccount = useCallback((newAcc: Omit<Account, 'id'>) => {
     const id = `acc-${Date.now()}`;
     setAccounts((prev) => [...prev, { ...newAcc, id }]);
-    showToast(`Added @${newAcc.username}`);
+    showToast(`Added ${newAcc.username}`);
+  }, []);
+
+  const handleUpdateAccount = useCallback((updated: Account) => {
+    setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  }, []);
+
+  const handleDeleteAccount = useCallback((accountId: string) => {
+    setAccounts((prev) => prev.filter((a) => a.id !== accountId));
   }, []);
 
   const handleAddEmployee = useCallback((newEmp: Omit<Employee, 'id'>) => {
     const id = `emp-${Date.now()}`;
     setEmployees((prev) => [...prev, { ...newEmp, id }]);
-    showToast(`Added team member ${newEmp.name}`);
+    showToast(`Added team creator ${newEmp.name}`);
   }, []);
+
+  const handleUpdateEmployee = useCallback((updated: Employee) => {
+    setEmployees((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+  }, []);
+
+  const handleDeleteEmployee = useCallback((empId: string) => {
+    setEmployees((prev) => prev.filter((e) => e.id !== empId));
+    setAccounts((prev) => prev.map((a) => (a.employeeId === empId ? { ...a, employeeId: '' } : a)));
+  }, []);
+
+  // Admin Unlock & Lock handlers
+  const handleUnlockAdmin = () => {
+    setIsAdminUnlocked(true);
+    try {
+      sessionStorage.setItem(STORAGE_KEY_ADMIN_AUTH, 'true');
+    } catch {}
+    setAdminPasswordModalOpen(false);
+    setActiveTab('admin');
+    showToast('Admin Panel unlocked with WIN2026');
+  };
+
+  const handleLockAdmin = () => {
+    setIsAdminUnlocked(false);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY_ADMIN_AUTH);
+    } catch {}
+    setActiveTab('dashboard');
+    showToast('Admin Panel locked');
+  };
 
   const handleResetData = useCallback(() => {
     if (window.confirm('Reset all data to sample records? Custom edits will be cleared.')) {
@@ -268,66 +319,103 @@ export default function App() {
         </div>
       )}
 
-      {/* Left Navigation Sidebar */}
+      {/* Left Navigation Sidebar with Admin Tab */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          if (tab === 'admin' && !isAdminUnlocked) {
+            setAdminPasswordModalOpen(true);
+          } else {
+            setActiveTab(tab);
+          }
+        }}
         theme={theme}
         onToggleTheme={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
         onOpenMemberShare={() => handleOpenMemberShare()}
         onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
+        isAdminUnlocked={isAdminUnlocked}
+        onPromptAdminPassword={() => setAdminPasswordModalOpen(true)}
       />
 
       {/* Main Content Viewport - strictly fits 1 screen */}
       <main className="flex-1 h-screen flex flex-col min-w-0 p-3.5 lg:p-4 overflow-hidden gap-2.5">
         
-        {/* Dashboard Header with Title, Range Tabs, More actions ⋮ */}
-        <DashboardHeader
-          range={range}
-          onRangeChange={setRange}
-          dateRangeList={dateRangeList}
-          theme={theme}
-          onOpenMemberShare={() => handleOpenMemberShare()}
-          onCopyWhatsApp={handleCopyWhatsApp}
-          onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
-          onOpenAddAccount={() => setAddAccountModalOpen(true)}
-          onOpenAddEmployee={() => setAddEmployeeModalOpen(true)}
-          onResetData={handleResetData}
-          copyFeedback={copyFeedback}
-        />
+        {activeTab === 'admin' && isAdminUnlocked ? (
+          /* Admin Panel View */
+          <AdminPanel
+            employees={employees}
+            accounts={accounts}
+            campaigns={campaigns}
+            onUpdateEmployee={handleUpdateEmployee}
+            onDeleteEmployee={handleDeleteEmployee}
+            onAddEmployee={handleAddEmployee}
+            onUpdateAccount={handleUpdateAccount}
+            onDeleteAccount={handleDeleteAccount}
+            onAddAccount={handleAddAccount}
+            onLockAdmin={handleLockAdmin}
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            theme={theme}
+          />
+        ) : (
+          /* Standard Dashboard View */
+          <>
+            {/* Dashboard Header with Daily, 4D, 7D, 14D, 30D Tabs */}
+            <DashboardHeader
+              range={range}
+              onRangeChange={setRange}
+              dateRangeList={dateRangeList}
+              theme={theme}
+              onOpenMemberShare={() => handleOpenMemberShare()}
+              onCopyWhatsApp={handleCopyWhatsApp}
+              onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
+              onOpenAddAccount={() => setAddAccountModalOpen(true)}
+              onOpenAddEmployee={() => setAddEmployeeModalOpen(true)}
+              onResetData={handleResetData}
+              copyFeedback={copyFeedback}
+            />
 
-        {/* 4 KPI Summary Cards */}
-        <KpiSummaryStrip
-          employees={employees}
-          accounts={accounts}
-          records={records}
-          dateRangeList={dateRangeList}
-          theme={theme}
-        />
+            {/* 4 KPI Summary Cards */}
+            <KpiSummaryStrip
+              employees={employees}
+              accounts={accounts}
+              records={records}
+              dateRangeList={dateRangeList}
+              theme={theme}
+            />
 
-        {/* The Central Upload Matrix Grid Table */}
-        <UploadMatrix
-          employees={employees}
-          accounts={accounts}
-          records={records}
-          dateRangeList={dateRangeList}
-          searchQuery={searchQuery}
-          selectedCampaignId={selectedCampaignId}
-          onOpenInspector={({ dateStr, employeeId, accountId }) => {
-            setInspectorState({
-              isOpen: true,
-              dateStr,
-              employeeId,
-              accountId,
-            });
-          }}
-          onAssignAccount={handleAssignAccount}
-          onAddAccount={() => setAddAccountModalOpen(true)}
-          theme={theme}
-          onShareMember={(employeeId, dateStr) => handleOpenMemberShare(employeeId, dateStr)}
-        />
+            {/* The Central Upload Matrix Grid Table */}
+            <UploadMatrix
+              employees={employees}
+              accounts={accounts}
+              records={records}
+              dateRangeList={dateRangeList}
+              searchQuery={searchQuery}
+              selectedCampaignId={selectedCampaignId}
+              onOpenInspector={({ dateStr, employeeId, accountId }) => {
+                setInspectorState({
+                  isOpen: true,
+                  dateStr,
+                  employeeId,
+                  accountId,
+                });
+              }}
+              onAssignAccount={handleAssignAccount}
+              onAddAccount={() => setAddAccountModalOpen(true)}
+              theme={theme}
+              onShareMember={(employeeId, dateStr) => handleOpenMemberShare(employeeId, dateStr)}
+            />
+          </>
+        )}
 
       </main>
+
+      {/* Admin Password Authentication Modal (WIN2026) */}
+      <AdminPasswordModal
+        isOpen={adminPasswordModalOpen}
+        onClose={() => setAdminPasswordModalOpen(false)}
+        onSuccess={handleUnlockAdmin}
+        theme={theme}
+      />
 
       {/* Day Inspector Popover / Modal (Adjust Clips) */}
       <DayInspectorModal
@@ -355,7 +443,7 @@ export default function App() {
         theme={theme}
       />
 
-      {/* Creator Daily Brief Graphic & Share Modal (The popup from the user's uploaded reference) */}
+      {/* Creator Daily Brief Graphic & Share Modal */}
       <MemberShareModal
         isOpen={memberShareState.isOpen}
         onClose={() => setMemberShareState((prev) => ({ ...prev, isOpen: false }))}

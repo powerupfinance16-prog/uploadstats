@@ -88,14 +88,15 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5" />
         </div>
 
-        {/* Segmented Range Tabs: 4D | 7D | 14D | 30D */}
+        {/* Segmented Range Tabs: Daily | 4D | 7D | 14D | 30D */}
         <div className={`inline-flex p-0.5 rounded-xl border ${
           isLight 
             ? 'bg-white border-slate-200/90 shadow-2xs' 
             : 'bg-[#121214] border-zinc-800'
         }`}>
           {[
-            { id: '4', label: '4D (Clean)' },
+            { id: '1', label: 'Daily' },
+            { id: '4', label: '4D' },
             { id: '7', label: '7D' },
             { id: '14', label: '14D' },
             { id: '30', label: '30D' },
