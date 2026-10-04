@@ -1,0 +1,6 @@
+{
+  "name": "FocusFlow - Team Video Upload Matrix",
+  "description": "High-density datewise video upload quota & habit tracker matrix for Instagram agency and video production teams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
