@@ -24,13 +24,15 @@ import {
   TODAY_STR 
 } from './utils/dateUtils';
 import { generateWhatsAppReport } from './utils/whatsappGenerator';
-import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { DashboardHeader } from './components/DashboardHeader';
 import { KpiSummaryStrip } from './components/KpiSummaryStrip';
 import { UploadMatrix } from './components/UploadMatrix';
 import { DayInspectorModal } from './components/DayInspectorModal';
 import { WhatsAppModal } from './components/WhatsAppModal';
 import { AccountManagementModal } from './components/AccountManagementModal';
 import { EmployeeManagementModal } from './components/EmployeeManagementModal';
+import { MemberShareModal } from './components/MemberShareModal';
 import { Check } from 'lucide-react';
 
 const STORAGE_KEY_EMPLOYEES = 'focusflow_employees_v1';
@@ -78,7 +80,7 @@ export default function App() {
     }
   });
 
-  // Theme & Tile Style
+  // Theme: default dark mode
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_THEME);
@@ -127,11 +129,11 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY_TILE_STYLE, tileStyle);
   }, [tileStyle]);
 
-  // 2. Filter & Navigation State
-  const [range, setRange] = useState<DateRangeType>('14'); // Default 14 Days
+  // 2. Navigation & Filter State
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [range, setRange] = useState<DateRangeType>('4'); // Default Last 4 Days!
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showPayouts, setShowPayouts] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
 
@@ -149,6 +151,14 @@ export default function App() {
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [addAccountModalOpen, setAddAccountModalOpen] = useState(false);
   const [addEmployeeModalOpen, setAddEmployeeModalOpen] = useState(false);
+  const [memberShareState, setMemberShareState] = useState<{
+    isOpen: boolean;
+    employeeId?: string;
+    dateStr?: string;
+  }>({
+    isOpen: false,
+    dateStr: TODAY_STR,
+  });
 
   // 4. Date Range List
   const dateRangeList = useMemo(() => {
@@ -156,6 +166,14 @@ export default function App() {
   }, [range]);
 
   // 5. Handlers
+  const handleOpenMemberShare = useCallback((employeeId?: string, dateStr?: string) => {
+    setMemberShareState({
+      isOpen: true,
+      employeeId: employeeId || employees[0]?.id,
+      dateStr: dateStr || TODAY_STR,
+    });
+  }, [employees]);
+
   const handleUpdateRecord = useCallback(
     (dateStr: string, accountId: string, newCount: number) => {
       const recordId = `${dateStr}_${accountId}`;
@@ -174,52 +192,50 @@ export default function App() {
   );
 
   const handleAssignAccount = useCallback(
-    (accountId: string, employeeId: string) => {
+    (accountId: string, newEmployeeId: string) => {
       setAccounts((prev) =>
-        prev.map((acc) => (acc.id === accountId ? { ...acc, employeeId } : acc))
+        prev.map((acc) => (acc.id === accountId ? { ...acc, employeeId: newEmployeeId } : acc))
       );
-      const emp = employees.find((e) => e.id === employeeId);
-      const acc = accounts.find((a) => a.id === accountId);
-      if (emp && acc) {
-        showToast(`Assigned ${acc.username} to ${emp.name}`);
-      }
+      showToast('Assigned editor to account');
     },
-    [employees, accounts]
+    []
   );
 
   const handleAddAccount = useCallback((newAcc: Omit<Account, 'id'>) => {
-    const id = `acc_${Date.now()}`;
-    const account: Account = { ...newAcc, id };
-    setAccounts((prev) => [...prev, account]);
-    showToast(`Added Instagram account ${account.username}`);
+    const id = `acc-${Date.now()}`;
+    setAccounts((prev) => [...prev, { ...newAcc, id }]);
+    showToast(`Added @${newAcc.username}`);
   }, []);
 
   const handleAddEmployee = useCallback((newEmp: Omit<Employee, 'id'>) => {
-    const id = `emp_${Date.now()}`;
-    const employee: Employee = { ...newEmp, id };
-    setEmployees((prev) => [...prev, employee]);
-    showToast(`Added team member ${employee.name}`);
+    const id = `emp-${Date.now()}`;
+    setEmployees((prev) => [...prev, { ...newEmp, id }]);
+    showToast(`Added team member ${newEmp.name}`);
   }, []);
 
   const handleResetData = useCallback(() => {
-    if (window.confirm('Reset video upload matrix to initial sample data?')) {
-      const initRec = generateInitialRecords();
+    if (window.confirm('Reset all data to sample records? Custom edits will be cleared.')) {
       setEmployees(INITIAL_EMPLOYEES);
       setAccounts(INITIAL_ACCOUNTS);
       setCampaigns(INITIAL_CAMPAIGNS);
-      setRecords(initRec);
+      setRecords(generateInitialRecords());
       localStorage.removeItem(STORAGE_KEY_EMPLOYEES);
       localStorage.removeItem(STORAGE_KEY_ACCOUNTS);
       localStorage.removeItem(STORAGE_KEY_CAMPAIGNS);
       localStorage.removeItem(STORAGE_KEY_RECORDS);
-      showToast('Reset to default sample data.');
+      showToast('Data reset to default sample values');
     }
   }, []);
 
-  // 1-Click WhatsApp Daily Report
   const handleCopyWhatsApp = useCallback(async () => {
+    const report = generateWhatsAppReport(
+      TODAY_STR,
+      employees,
+      accounts,
+      records
+    );
+
     try {
-      const report = generateWhatsAppReport(TODAY_STR, employees, accounts, records);
       await navigator.clipboard.writeText(report);
       setCopyFeedback(true);
       showToast("Today's WhatsApp Report copied to clipboard!");
@@ -240,53 +256,56 @@ export default function App() {
   const isLight = theme === 'light';
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
-      isLight ? 'bg-slate-100 text-slate-900' : 'bg-[#090D16] text-slate-100'
+    <div className={`h-screen w-screen overflow-hidden flex font-sans transition-colors duration-200 select-none ${
+      isLight ? 'bg-[#F8FAFC] text-slate-900' : 'bg-[#09090B] text-zinc-100'
     }`}>
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs animate-in slide-in-from-bottom-3 duration-200">
-          <Check className="w-4 h-4 stroke-[3]" />
+        <div className="fixed bottom-6 right-6 z-50 bg-zinc-800 text-zinc-100 border border-zinc-700 font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs animate-in slide-in-from-bottom-3 duration-200">
+          <Check className="w-4 h-4 stroke-[2.5] text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Header with Title, Range Switcher, Campaign Filter, WhatsApp Button, Theme Toggle */}
-      <Header
-        range={range}
-        onRangeChange={setRange}
-        campaigns={campaigns}
-        selectedCampaignId={selectedCampaignId}
-        onSelectCampaign={setSelectedCampaignId}
-        onCopyWhatsApp={handleCopyWhatsApp}
-        onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
-        onOpenAddAccount={() => setAddAccountModalOpen(true)}
-        onOpenAddEmployee={() => setAddEmployeeModalOpen(true)}
-        onResetData={handleResetData}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        showPayouts={showPayouts}
-        onTogglePayouts={() => setShowPayouts((prev) => !prev)}
-        copyFeedback={copyFeedback}
+      {/* Left Navigation Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         theme={theme}
         onToggleTheme={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
+        onOpenMemberShare={() => handleOpenMemberShare()}
+        onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
       />
 
-      {/* Main Content Viewport */}
-      <main className="flex-1 p-4 lg:p-8 max-w-[1720px] mx-auto w-full">
+      {/* Main Content Viewport - strictly fits 1 screen */}
+      <main className="flex-1 h-screen flex flex-col min-w-0 p-3.5 lg:p-4 overflow-hidden gap-2.5">
         
-        {/* KPI Summary Strip */}
+        {/* Dashboard Header with Title, Range Tabs, More actions ⋮ */}
+        <DashboardHeader
+          range={range}
+          onRangeChange={setRange}
+          dateRangeList={dateRangeList}
+          theme={theme}
+          onOpenMemberShare={() => handleOpenMemberShare()}
+          onCopyWhatsApp={handleCopyWhatsApp}
+          onOpenWhatsAppModal={() => setWhatsAppModalOpen(true)}
+          onOpenAddAccount={() => setAddAccountModalOpen(true)}
+          onOpenAddEmployee={() => setAddEmployeeModalOpen(true)}
+          onResetData={handleResetData}
+          copyFeedback={copyFeedback}
+        />
+
+        {/* 4 KPI Summary Cards */}
         <KpiSummaryStrip
           employees={employees}
           accounts={accounts}
           records={records}
           dateRangeList={dateRangeList}
-          showPayouts={showPayouts}
           theme={theme}
         />
 
-        {/* Datewise Habit Tracker Matrix Grid */}
+        {/* The Central Upload Matrix Grid Table */}
         <UploadMatrix
           employees={employees}
           accounts={accounts}
@@ -305,12 +324,12 @@ export default function App() {
           onAssignAccount={handleAssignAccount}
           onAddAccount={() => setAddAccountModalOpen(true)}
           theme={theme}
-          tileStyle={tileStyle}
-          onTileStyleChange={setTileStyle}
+          onShareMember={(employeeId, dateStr) => handleOpenMemberShare(employeeId, dateStr)}
         />
+
       </main>
 
-      {/* Day Inspector Detail Popover / Modal */}
+      {/* Day Inspector Popover / Modal (Adjust Clips) */}
       <DayInspectorModal
         isOpen={inspectorState.isOpen}
         onClose={() => setInspectorState((prev) => ({ ...prev, isOpen: false }))}
@@ -322,6 +341,7 @@ export default function App() {
         records={records}
         onUpdateRecord={handleUpdateRecord}
         theme={theme}
+        onShareMember={(employeeId, dateStr) => handleOpenMemberShare(employeeId, dateStr)}
       />
 
       {/* WhatsApp Report Generator Modal */}
@@ -332,6 +352,19 @@ export default function App() {
         accounts={accounts}
         records={records}
         dateRangeList={dateRangeList}
+        theme={theme}
+      />
+
+      {/* Creator Daily Brief Graphic & Share Modal (The popup from the user's uploaded reference) */}
+      <MemberShareModal
+        isOpen={memberShareState.isOpen}
+        onClose={() => setMemberShareState((prev) => ({ ...prev, isOpen: false }))}
+        employees={employees}
+        accounts={accounts}
+        records={records}
+        dateRangeList={dateRangeList}
+        initialEmployeeId={memberShareState.employeeId}
+        initialDateStr={memberShareState.dateStr}
         theme={theme}
       />
 
@@ -350,6 +383,7 @@ export default function App() {
         onClose={() => setAddEmployeeModalOpen(false)}
         onAddEmployee={handleAddEmployee}
       />
+
     </div>
   );
 }

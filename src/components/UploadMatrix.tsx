@@ -1,22 +1,18 @@
 import React, { useState } from 'react';
 import { 
+  Calendar as CalendarIcon, 
   ChevronRight, 
   ChevronDown, 
-  Flame, 
-  Check, 
   Instagram, 
-  AlertCircle,
-  Plus,
-  Clock,
-  Palette
+  Check, 
+  Share2,
+  Filter
 } from 'lucide-react';
-import { Employee, Account, DailyRecord, ThemeMode, TileStyle } from '../types';
+import { Employee, Account, DailyRecord, ThemeMode } from '../types';
 import { 
-  formatDayOfWeek, 
   formatDateNumber, 
   formatDateMonth, 
-  isToday, 
-  isFuture
+  isToday 
 } from '../utils/dateUtils';
 
 interface UploadMatrixProps {
@@ -30,8 +26,7 @@ interface UploadMatrixProps {
   onAssignAccount: (accountId: string, employeeId: string) => void;
   onAddAccount: () => void;
   theme: ThemeMode;
-  tileStyle: TileStyle;
-  onTileStyleChange: (style: TileStyle) => void;
+  onShareMember: (employeeId: string, dateStr?: string) => void;
 }
 
 export const UploadMatrix: React.FC<UploadMatrixProps> = ({
@@ -39,21 +34,18 @@ export const UploadMatrix: React.FC<UploadMatrixProps> = ({
   accounts,
   records,
   dateRangeList,
-  searchQuery,
-  selectedCampaignId,
   onOpenInspector,
-  onAssignAccount,
-  onAddAccount,
   theme,
-  tileStyle,
-  onTileStyleChange,
+  onShareMember,
 }) => {
   const isLight = theme === 'light';
 
-  // Expanded employee IDs for accordion rows
+  // Toggle expanded states per employee (default first is expanded as in screenshot)
   const [expandedEmployees, setExpandedEmployees] = useState<Record<string, boolean>>({
-    emp1: true,
+    [employees[0]?.id || 'emp-1']: true,
   });
+
+  const [accountFilter, setAccountFilter] = useState<string>('all');
 
   const toggleExpand = (empId: string) => {
     setExpandedEmployees((prev) => ({
@@ -62,765 +54,420 @@ export const UploadMatrix: React.FC<UploadMatrixProps> = ({
     }));
   };
 
-  const expandAll = () => {
-    const all: Record<string, boolean> = {};
-    employees.forEach((e) => { all[e.id] = true; });
-    setExpandedEmployees(all);
+  // Helper for Circular Consistency Ring SVG
+  const renderConsistencyRing = (percentage: number) => {
+    const radius = 11;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (Math.min(100, percentage) / 100) * circumference;
+
+    const strokeColor = percentage >= 80 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444';
+
+    return (
+      <div className="flex items-center justify-center gap-1.5">
+        <div className="relative w-7 h-7 shrink-0 flex items-center justify-center">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 28 28">
+            <circle
+              cx="14"
+              cy="14"
+              r={radius}
+              fill="transparent"
+              stroke={isLight ? '#F1F5F9' : '#27272A'}
+              strokeWidth="3"
+            />
+            <circle
+              cx="14"
+              cy="14"
+              r={radius}
+              fill="transparent"
+              stroke={strokeColor}
+              strokeWidth="3"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+        <span className={`text-[11px] font-bold tabular-nums ${
+          percentage >= 80 
+            ? 'text-emerald-500 dark:text-emerald-400' 
+            : percentage >= 50 
+              ? 'text-amber-500 dark:text-amber-400' 
+              : 'text-rose-500 dark:text-rose-400'
+        }`}>
+          {percentage}%
+        </span>
+      </div>
+    );
   };
 
-  const collapseAll = () => {
-    setExpandedEmployees({});
-  };
-
-  // Filter accounts by campaign if selected
-  const campaignFilteredAccounts = accounts.filter((acc) => {
-    if (selectedCampaignId === 'all') return true;
-    return acc.campaignId === selectedCampaignId;
-  });
-
-  // Filter employees and accounts by search query
-  const searchLower = searchQuery.toLowerCase().trim();
-
-  const filteredEmployees = employees.filter((emp) => {
-    const empAccounts = campaignFilteredAccounts.filter((a) => a.employeeId === emp.id);
-    if (selectedCampaignId !== 'all' && empAccounts.length === 0) return false;
-
-    if (!searchLower) return true;
-    if (emp.name.toLowerCase().includes(searchLower)) return true;
-    return empAccounts.some((a) => a.username.toLowerCase().includes(searchLower));
-  });
-
-  const unassignedAccounts = campaignFilteredAccounts.filter((a) => !a.employeeId && (
-    !searchLower || a.username.toLowerCase().includes(searchLower)
-  ));
-
-  // Cell color helper based on tileStyle and theme
-  const getCellClasses = (isMet: boolean, isPartial: boolean, isZero: boolean) => {
-    if (tileStyle === 'solid') {
-      if (isMet) {
-        return 'bg-emerald-600 text-white font-bold shadow-xs hover:bg-emerald-500 hover:scale-[1.03]';
-      }
-      if (isPartial) {
-        return isLight
-          ? 'bg-amber-500 text-white font-bold shadow-xs hover:bg-amber-600 hover:scale-[1.03]'
-          : 'bg-amber-500 text-slate-950 font-bold shadow-xs hover:bg-amber-400 hover:scale-[1.03]';
-      }
-      return isLight
-        ? 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200/80 hover:text-slate-700'
-        : 'bg-slate-900/70 text-slate-500 border border-slate-800/80 hover:border-slate-700 hover:text-slate-300';
-    }
-
-    if (tileStyle === 'translucent') {
-      if (isMet) {
-        return isLight
-          ? 'bg-emerald-100/90 text-emerald-800 border border-emerald-300 font-bold hover:bg-emerald-200/80'
-          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold hover:bg-emerald-500/30';
-      }
-      if (isPartial) {
-        return isLight
-          ? 'bg-amber-100/90 text-amber-800 border border-amber-300 font-bold hover:bg-amber-200/80'
-          : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold hover:bg-amber-500/30';
-      }
-      return isLight
-        ? 'bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100 hover:text-slate-600'
-        : 'bg-slate-950/50 text-slate-500 border border-slate-800/80 hover:border-slate-700 hover:text-slate-400';
-    }
-
-    // Minimal style
-    if (isMet) {
-      return isLight
-        ? 'bg-white border-2 border-emerald-500 text-emerald-700 font-bold'
-        : 'bg-slate-900 border-2 border-emerald-500 text-emerald-400 font-bold';
-    }
-    if (isPartial) {
-      return isLight
-        ? 'bg-white border-2 border-amber-500 text-amber-700 font-bold'
-        : 'bg-slate-900 border-2 border-amber-500 text-amber-400 font-bold';
-    }
-    return isLight
-      ? 'bg-slate-100 text-slate-400 border border-slate-200'
-      : 'bg-slate-950 text-slate-600 border border-slate-800';
-  };
+  const filteredEmployees = employees;
 
   return (
-    <div className={`rounded-2xl border overflow-hidden transition-colors shadow-xl flex flex-col ${
+    <div className={`flex-1 min-h-0 rounded-xl border transition-colors shadow-sm overflow-hidden flex flex-col ${
       isLight 
-        ? 'bg-white border-slate-200 text-slate-900' 
-        : 'bg-slate-900 border-slate-800 text-slate-100'
+        ? 'bg-white border-slate-200/80 text-slate-900' 
+        : 'bg-[#121214] border-zinc-800 text-zinc-100'
     }`}>
       
-      {/* Table Subheader: Title, Tile Style Selector & Legend */}
-      <div className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 ${
-        isLight ? 'bg-slate-50/90 border-slate-200' : 'bg-slate-950/70 border-slate-800'
+      {/* Table Header: Upload Matrix Title, Legend, Filter Dropdown */}
+      <div className={`px-4 py-2 border-b flex flex-wrap items-center justify-between gap-3 shrink-0 ${
+        isLight ? 'bg-white border-slate-100' : 'bg-[#18181B] border-zinc-800'
       }`}>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
-            Upload Habit Grid
-          </span>
-          <span className="text-slate-400">·</span>
-          <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-            Click any cell to edit clips
-          </span>
-        </div>
-
-        {/* Tile Color Style Switcher */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
-            <Palette className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Color Style:</span>
+        
+        {/* Left: Icon, Title & Subtitle */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center">
+            <CalendarIcon className="w-3.5 h-3.5" />
           </div>
-          <div className={`inline-flex p-0.5 rounded-lg border text-xs ${
-            isLight ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800'
-          }`}>
-            <button
-              onClick={() => onTileStyleChange('solid')}
-              className={`px-2 py-0.5 rounded font-medium transition-all ${
-                tileStyle === 'solid'
-                  ? isLight
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-emerald-500 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Solid
-            </button>
-            <button
-              onClick={() => onTileStyleChange('translucent')}
-              className={`px-2 py-0.5 rounded font-medium transition-all ${
-                tileStyle === 'translucent'
-                  ? isLight
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-emerald-500 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Soft
-            </button>
-            <button
-              onClick={() => onTileStyleChange('minimal')}
-              className={`px-2 py-0.5 rounded font-medium transition-all ${
-                tileStyle === 'minimal'
-                  ? isLight
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-emerald-500 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Outline
-            </button>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+              Upload Matrix
+            </h2>
+            <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">
+              Click on any cell to edit uploads
+            </span>
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-3.5 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
-              ✓
-            </span>
-            <span className={isLight ? 'text-slate-600' : 'text-slate-300'}>Met Quota</span>
+        {/* Right: Legend (Met Quota, In Progress, Missed) + Filter Dropdown */}
+        <div className="flex flex-wrap items-center gap-3.5">
+          <div className="flex items-center gap-3 text-xs font-medium text-slate-600 dark:text-zinc-400">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[11px]">Met Quota</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span className="text-[11px]">In Progress</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span className="text-[11px]">Missed</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-amber-500 text-slate-950 flex items-center justify-center text-[9px] font-bold">
-              ½
-            </span>
-            <span className={isLight ? 'text-slate-600' : 'text-slate-300'}>In Progress</span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-              isLight ? 'bg-slate-200 text-slate-500' : 'bg-slate-800 text-slate-400'
-            }`}>
-              -
-            </span>
-            <span className={isLight ? 'text-slate-600' : 'text-slate-300'}>Missed</span>
-          </div>
-
-          <div className="h-3 w-[1px] bg-slate-300 dark:bg-slate-800 hidden sm:block" />
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={expandAll}
-              className={`text-[11px] font-medium transition-colors ${
-                isLight ? 'text-slate-600 hover:text-emerald-600' : 'text-slate-400 hover:text-emerald-400'
+          <div className="relative">
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className={`px-2.5 py-1 pr-7 rounded-lg border text-xs font-semibold appearance-none cursor-pointer transition-all ${
+                isLight 
+                  ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50' 
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-300'
               }`}
             >
-              Expand All
-            </button>
-            <span className="text-slate-400">/</span>
-            <button
-              onClick={collapseAll}
-              className={`text-[11px] font-medium transition-colors ${
-                isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Collapse
-            </button>
+              <option value="all">All Accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.username}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
+
       </div>
 
-      {/* Main Matrix Scroll Container */}
-      <div className="overflow-x-auto relative max-h-[calc(100vh-280px)]">
-        <table className="w-full text-left border-collapse select-none">
+      {/* Responsive Horizontal & Vertical Scroll Container for Table Body */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full border-collapse text-left">
           
-          {/* Sticky Header with Dates */}
-          <thead className={`sticky top-0 z-20 border-b shadow-xs ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900 border-slate-800'
-          }`}>
-            <tr>
-              {/* Column 1: Creator / Account info (Sticky Left) */}
-              <th className={`sticky left-0 z-30 px-4 py-3 min-w-[240px] max-w-[280px] border-r shadow-[2px_0_5px_rgba(0,0,0,0.06)] ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-200'
-              }`}>
-                <div className="text-xs font-bold">
-                  Creator & Accounts
-                </div>
-                <div className="text-[11px] text-slate-500 font-normal">
-                  Target / Day
-                </div>
+          {/* Table Head */}
+          <thead className="sticky top-0 z-10">
+            <tr className={`border-b text-xs font-semibold ${
+              isLight ? 'border-slate-100 bg-slate-50 text-slate-500' : 'border-zinc-800 bg-[#18181B] text-zinc-400'
+            }`}>
+              
+              {/* Creator Column */}
+              <th className={`px-4 py-2.5 min-w-[200px] sticky left-0 z-20 ${isLight ? 'bg-slate-50' : 'bg-[#18181B]'}`}>
+                <div className="font-bold text-slate-900 dark:text-zinc-100">Creator & Accounts</div>
+                <div className="text-[10px] font-normal text-slate-400 dark:text-zinc-500">Target / Day</div>
               </th>
 
-              {/* Columns 2..N: Dates */}
-              {dateRangeList.map((dateStr) => {
-                const today = isToday(dateStr);
-                const dayOfWeek = formatDayOfWeek(dateStr);
-                const dayNum = formatDateNumber(dateStr);
-                const monthName = formatDateMonth(dateStr);
-                const isWeekend = dayOfWeek === 'Sat' || dayOfWeek === 'Sun';
+              {/* Date Columns - NO Day of week (Sat/Sun removed!), only Date & Month */}
+              {dateRangeList.map((dStr) => {
+                const today = isToday(dStr);
+                const dayNum = formatDateNumber(dStr);
+                const month = formatDateMonth(dStr);
 
                 return (
                   <th
-                    key={dateStr}
-                    className={`px-2 py-2 min-w-[56px] text-center border-r transition-colors ${
+                    key={dStr}
+                    className={`px-2 py-2 text-center min-w-[62px] ${
                       today 
-                        ? isLight
-                          ? 'bg-emerald-50 border-x-2 border-emerald-500 text-emerald-950 relative'
-                          : 'bg-emerald-950/40 border-x-2 border-emerald-500/80 text-white relative' 
-                        : isWeekend 
-                          ? isLight ? 'bg-slate-100/60 border-slate-200' : 'bg-slate-950/40 border-slate-800/80'
-                          : isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900 border-slate-800/80'
+                        ? isLight 
+                          ? 'bg-blue-50/80 border-x border-blue-200 text-blue-700 font-bold' 
+                          : 'bg-zinc-800/80 border-x border-zinc-700 text-zinc-100 font-bold'
+                        : ''
                     }`}
                   >
-                    {today && (
-                      <span className="absolute -top-1 left-1/2 -translate-x-1/2 px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950 rounded shadow-xs">
+                    <div className={`text-xs font-bold leading-tight ${today ? 'text-blue-600 dark:text-zinc-100' : isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+                      {dayNum} {month}
+                    </div>
+                    {today ? (
+                      <span className="inline-block text-[9px] font-bold tracking-tight uppercase px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-600 dark:bg-emerald-500/20 dark:text-emerald-400 border dark:border-emerald-500/30 mt-0.5">
                         Today
                       </span>
+                    ) : (
+                      <span className="inline-block text-[9px] font-medium text-slate-400 dark:text-zinc-500 mt-0.5">
+                        {dStr.slice(0, 4)}
+                      </span>
                     )}
-                    <div className={`text-[10px] uppercase font-bold tracking-wider ${
-                      today 
-                        ? 'text-emerald-600 dark:text-emerald-400 font-black' 
-                        : isWeekend 
-                          ? 'text-slate-500 dark:text-slate-400' 
-                          : 'text-slate-400 dark:text-slate-500'
-                    }`}>
-                      {dayOfWeek}
-                    </div>
-                    <div className={`text-xs tabular-nums font-bold leading-tight ${
-                      today 
-                        ? 'text-emerald-700 dark:text-emerald-300 text-sm' 
-                        : isLight ? 'text-slate-800' : 'text-slate-200'
-                    }`}>
-                      {dayNum}
-                    </div>
-                    <div className="text-[9px] text-slate-400 dark:text-slate-500 leading-none">
-                      {monthName}
-                    </div>
                   </th>
                 );
               })}
 
               {/* Summary Columns */}
-              <th className={`px-3 py-2 text-center min-w-[68px] border-l text-xs font-bold ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-300'
-              }`}>
-                <div>Total</div>
-                <div className="text-[10px] text-slate-400 font-normal">Clips</div>
+              <th className="px-3 py-2 text-center min-w-[60px]">
+                <div className="font-bold text-slate-900 dark:text-zinc-100">Total</div>
+                <div className="text-[10px] font-normal text-slate-400 dark:text-zinc-500">Clips</div>
               </th>
-              <th className={`px-3 py-2 text-center min-w-[68px] border-l text-xs font-bold ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-300'
-              }`}>
-                <div>Quota %</div>
-                <div className="text-[10px] text-slate-400 font-normal">Met</div>
-              </th>
-              <th className={`px-3 py-2 text-center min-w-[64px] border-l text-xs font-bold ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-300'
-              }`}>
-                <div>Streak</div>
-                <div className="text-[10px] text-slate-400 font-normal">Active</div>
+
+              <th className="px-4 py-2 text-center min-w-[85px]">
+                <div className="font-bold text-slate-900 dark:text-zinc-100">Consistency</div>
               </th>
             </tr>
           </thead>
 
           {/* Table Body */}
           <tbody className={`divide-y text-xs ${
-            isLight ? 'divide-slate-200 text-slate-800' : 'divide-slate-800/80 text-slate-200'
+            isLight ? 'divide-slate-100' : 'divide-zinc-800/80'
           }`}>
             {filteredEmployees.map((emp) => {
-              const empAccounts = campaignFilteredAccounts.filter((a) => a.employeeId === emp.id);
-              const isExpanded = expandedEmployees[emp.id] ?? false;
+              const isExpanded = !!expandedEmployees[emp.id];
+              const empAccounts = accounts.filter((a) => a.employeeId === emp.id);
+              const initials = emp.name.split(' ').map((n) => n[0]).slice(0, 2).join('');
+
+              // Calculate daily target
               const dailyTarget = empAccounts.reduce((sum, a) => sum + a.targetDailyClips, 0);
 
-              // Calculate summary stats across selected date range
+              // Calculate total period uploaded
               let periodUploaded = 0;
               let daysMet = 0;
-              let currentStreak = 0;
-              let streakBroken = false;
 
-              for (let i = dateRangeList.length - 1; i >= 0; i--) {
-                const dateStr = dateRangeList[i];
-                if (isFuture(dateStr)) continue;
-
-                let dayUploaded = 0;
+              dateRangeList.forEach((dStr) => {
+                let dayUp = 0;
                 empAccounts.forEach((acc) => {
-                  const rec = records[`${dateStr}_${acc.id}`];
-                  if (rec) dayUploaded += rec.uploadedClips;
+                  const rec = records[`${dStr}_${acc.id}`];
+                  if (rec) dayUp += rec.uploadedClips;
                 });
-
-                periodUploaded += dayUploaded;
-
-                if (dailyTarget > 0 && dayUploaded >= dailyTarget) {
+                periodUploaded += dayUp;
+                if (dailyTarget > 0 && dayUp >= dailyTarget) {
                   daysMet++;
-                  if (!streakBroken) {
-                    currentStreak++;
-                  }
-                } else {
-                  streakBroken = true;
                 }
-              }
+              });
 
-              const quotaMetPct = dateRangeList.length > 0 
+              const consistencyPct = dateRangeList.length > 0 
                 ? Math.round((daysMet / dateRangeList.length) * 100) 
                 : 0;
 
               return (
                 <React.Fragment key={emp.id}>
-                  {/* Parent Employee Row */}
-                  <tr className={`transition-colors group ${
-                    isLight ? 'hover:bg-slate-50' : 'hover:bg-slate-800/40'
+                  
+                  {/* Creator Parent Row */}
+                  <tr className={`group transition-colors ${
+                    isLight 
+                      ? 'hover:bg-slate-50/70 bg-white' 
+                      : 'hover:bg-[#18181B] bg-[#121214]'
                   }`}>
                     
-                    {/* Sticky Creator Cell */}
-                    <td className={`sticky left-0 z-10 px-4 py-3 border-r shadow-[2px_0_5px_rgba(0,0,0,0.06)] ${
-                      isLight 
-                        ? 'bg-white group-hover:bg-slate-50 border-slate-200' 
-                        : 'bg-slate-900 group-hover:bg-slate-850 border-slate-800'
+                    {/* Creator Info Cell */}
+                    <td className={`px-4 py-2.5 sticky left-0 z-10 ${
+                      isLight ? 'bg-white group-hover:bg-slate-50' : 'bg-[#121214] group-hover:bg-[#18181B]'
                     }`}>
                       <div className="flex items-center gap-2.5">
                         <button
                           onClick={() => toggleExpand(emp.id)}
-                          className={`p-1 rounded transition-colors ${
-                            isLight ? 'hover:bg-slate-200 text-slate-500' : 'hover:bg-slate-800 text-slate-400'
-                          }`}
-                          aria-label={isExpanded ? 'Collapse accounts' : 'Expand accounts'}
+                          className="p-1 rounded-md text-zinc-500 hover:text-zinc-200 transition-colors"
                         >
                           {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-emerald-500" />
+                            <ChevronDown className="w-3.5 h-3.5" />
                           ) : (
-                            <ChevronRight className="w-4 h-4" />
+                            <ChevronRight className="w-3.5 h-3.5" />
                           )}
                         </button>
 
                         {/* Avatar */}
                         <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-xs shrink-0 ring-1 ring-black/10"
+                          className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-xs cursor-pointer"
                           style={{ backgroundColor: emp.color || '#10B981' }}
+                          onClick={() => onShareMember(emp.id)}
+                          title="Click to view & share Creator Daily Brief"
                         >
-                          {emp.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                          {initials}
                         </div>
 
-                        {/* Name and Info */}
+                        {/* Name & Accounts info */}
                         <div className="truncate">
-                          <div className={`font-bold truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
-                            {emp.name}
+                          <div 
+                            className="font-bold text-xs text-slate-900 dark:text-zinc-100 hover:text-blue-500 cursor-pointer flex items-center gap-1.5"
+                            onClick={() => onShareMember(emp.id)}
+                          >
+                            <span>{emp.name}</span>
+                            <Share2 className="w-3 h-3 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <div className="text-[11px] flex items-center gap-1.5">
-                            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>
-                              {empAccounts.length} {empAccounts.length === 1 ? 'account' : 'accounts'}
-                            </span>
-                            <span className="text-slate-400">·</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
-                              {dailyTarget}/day
-                            </span>
+                          <div className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5">
+                            <span>{empAccounts.length} {empAccounts.length === 1 ? 'account' : 'accounts'}</span>
+                            <span>•</span>
+                            <span className="font-semibold text-emerald-500 dark:text-emerald-400">{dailyTarget}/day</span>
                           </div>
                         </div>
                       </div>
                     </td>
 
                     {/* Date Habit Cells */}
-                    {dateRangeList.map((dateStr) => {
-                      const today = isToday(dateStr);
-                      let dayUploaded = 0;
+                    {dateRangeList.map((dStr) => {
+                      const today = isToday(dStr);
+                      let dayUp = 0;
                       empAccounts.forEach((acc) => {
-                        const rec = records[`${dateStr}_${acc.id}`];
-                        if (rec) dayUploaded += rec.uploadedClips;
+                        const rec = records[`${dStr}_${acc.id}`];
+                        if (rec) dayUp += rec.uploadedClips;
                       });
 
-                      const isMet = dailyTarget > 0 && dayUploaded >= dailyTarget;
-                      const isPartial = dailyTarget > 0 && dayUploaded > 0 && dayUploaded < dailyTarget;
-                      const isZero = dayUploaded === 0;
-
-                      const cellStyleClasses = getCellClasses(isMet, isPartial, isZero);
+                      const isMet = dailyTarget > 0 && dayUp >= dailyTarget;
+                      const isPartial = dailyTarget > 0 && dayUp > 0 && dayUp < dailyTarget;
 
                       return (
                         <td
-                          key={dateStr}
-                          onClick={() => onOpenInspector({ dateStr, employeeId: emp.id })}
-                          className={`p-1 text-center cursor-pointer border-r transition-all ${
-                            isLight ? 'border-slate-200' : 'border-slate-800/80'
-                          } ${
-                            today ? (isLight ? 'bg-emerald-50/60' : 'bg-emerald-950/20') : ''
+                          key={dStr}
+                          onClick={() => onOpenInspector({ dateStr: dStr, employeeId: emp.id })}
+                          className={`px-1.5 py-1.5 text-center cursor-pointer ${
+                            today ? (isLight ? 'bg-blue-50/50' : 'bg-zinc-800/20') : ''
                           }`}
                         >
                           <div
-                            className={`h-9 w-full rounded-lg flex flex-col items-center justify-center transition-all ${cellStyleClasses}`}
-                            title={`${emp.name} on ${dateStr}: ${dayUploaded}/${dailyTarget} clips. Click to adjust.`}
+                            className={`mx-auto w-12 h-7 rounded-md flex items-center justify-center text-xs font-bold tabular-nums transition-transform hover:scale-105 ${
+                              isMet
+                                ? isLight 
+                                  ? 'bg-[#DCFCE7] text-[#15803D]' 
+                                  : 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'
+                                : isPartial
+                                  ? isLight 
+                                    ? 'bg-[#FFEDD5] text-[#C2410C]' 
+                                    : 'bg-amber-950/60 text-amber-400 border border-amber-500/30'
+                                  : isLight 
+                                    ? 'bg-[#F1F5F9] text-[#94A3B8]' 
+                                    : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                            }`}
+                            title={`${emp.name}: ${dayUp}/${dailyTarget} clips on ${dStr}. Click to adjust.`}
                           >
-                            <span className="font-extrabold tabular-nums text-xs leading-none flex items-center gap-0.5">
-                              {dayUploaded}
-                              {isMet && <Check className="w-3 h-3 stroke-[3]" />}
-                            </span>
-                            <span className="text-[9px] opacity-80 tabular-nums leading-none mt-0.5">
-                              /{dailyTarget}
-                            </span>
+                            {dayUp > 0 ? `${dayUp}/${dailyTarget}` : `0/${dailyTarget}`}
                           </div>
                         </td>
                       );
                     })}
 
-                    {/* Summary: Total Clips */}
-                    <td className={`px-3 py-2 text-center border-l font-bold tabular-nums ${
-                      isLight ? 'border-slate-200 text-slate-800' : 'border-slate-800 text-slate-200'
-                    }`}>
+                    {/* Total Clips */}
+                    <td className="px-3 py-2 text-center font-bold text-xs tabular-nums text-slate-800 dark:text-zinc-200">
                       {periodUploaded}
                     </td>
 
-                    {/* Summary: Quota % */}
-                    <td className={`px-3 py-2 text-center border-l tabular-nums ${
-                      isLight ? 'border-slate-200' : 'border-slate-800'
-                    }`}>
-                      <span className={`font-bold ${
-                        quotaMetPct >= 80 
-                          ? 'text-emerald-600 dark:text-emerald-400' 
-                          : quotaMetPct >= 50 
-                            ? 'text-amber-600 dark:text-amber-400' 
-                            : 'text-rose-500'
-                      }`}>
-                        {quotaMetPct}%
-                      </span>
-                    </td>
-
-                    {/* Summary: Streak */}
-                    <td className={`px-3 py-2 text-center border-l tabular-nums ${
-                      isLight ? 'border-slate-200' : 'border-slate-800'
-                    }`}>
-                      {currentStreak > 0 ? (
-                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold text-[11px]">
-                          <Flame className="w-3 h-3 fill-amber-500" />
-                          <span>{currentStreak}d</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
+                    {/* Consistency Circular Ring */}
+                    <td className="px-4 py-2 text-center">
+                      {renderConsistencyRing(consistencyPct)}
                     </td>
 
                   </tr>
 
-                  {/* Accordion: Nested Account Rows for this Creator */}
+                  {/* Nested Instagram Account Rows (when expanded) */}
                   {isExpanded && empAccounts.map((acc) => {
-                    let accPeriodUploaded = 0;
+                    let accPeriodUp = 0;
                     let accDaysMet = 0;
 
-                    dateRangeList.forEach((dateStr) => {
-                      const rec = records[`${dateStr}_${acc.id}`];
-                      const upl = rec ? rec.uploadedClips : 0;
-                      accPeriodUploaded += upl;
-                      if (upl >= acc.targetDailyClips) {
+                    dateRangeList.forEach((dStr) => {
+                      const rec = records[`${dStr}_${acc.id}`];
+                      const up = rec ? rec.uploadedClips : 0;
+                      accPeriodUp += up;
+                      if (acc.targetDailyClips > 0 && up >= acc.targetDailyClips) {
                         accDaysMet++;
                       }
                     });
 
-                    const accQuotaPct = dateRangeList.length > 0 
+                    const accConsistencyPct = dateRangeList.length > 0 
                       ? Math.round((accDaysMet / dateRangeList.length) * 100) 
                       : 0;
 
                     return (
                       <tr 
-                        key={acc.id} 
-                        className={`transition-colors text-[11px] group/account border-t ${
+                        key={acc.id}
+                        className={`transition-colors ${
                           isLight 
-                            ? 'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/70' 
-                            : 'bg-slate-950/60 hover:bg-slate-900/80 border-slate-800/40'
+                            ? 'bg-slate-50/40 hover:bg-slate-100/50' 
+                            : 'bg-zinc-950/40 hover:bg-zinc-900/60'
                         }`}
                       >
-                        {/* Nested Account Header */}
-                        <td className={`sticky left-0 z-10 pl-11 pr-4 py-2 border-r shadow-[2px_0_5px_rgba(0,0,0,0.06)] ${
-                          isLight 
-                            ? 'bg-slate-50/90 group-hover/account:bg-slate-100 border-slate-200' 
-                            : 'bg-slate-950/90 group-hover/account:bg-slate-900 border-slate-800'
+                        {/* Account Name Cell */}
+                        <td className={`pl-12 pr-4 py-1.5 sticky left-0 z-10 ${
+                          isLight ? 'bg-slate-50/40' : 'bg-zinc-950/40'
                         }`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 truncate">
-                              <Instagram className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-                              <span className={`font-semibold truncate ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-                                {acc.username}
-                              </span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-md bg-pink-950/30 border border-pink-500/20 text-pink-400 flex items-center justify-center shrink-0">
+                              <Instagram className="w-3 h-3" />
                             </div>
-                            <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded border ${
-                              isLight 
-                                ? 'bg-white border-slate-200 text-slate-600' 
-                                : 'bg-slate-900 border-slate-800 text-slate-400'
-                            }`}>
-                              {acc.targetDailyClips}/day
-                            </span>
+                            <div className="truncate">
+                              <div className="font-medium text-xs text-slate-800 dark:text-zinc-300">
+                                {acc.username}
+                              </div>
+                            </div>
                           </div>
                         </td>
 
                         {/* Account Date Habit Cells */}
-                        {dateRangeList.map((dateStr) => {
-                          const today = isToday(dateStr);
-                          const rec = records[`${dateStr}_${acc.id}`];
-                          const uploaded = rec ? rec.uploadedClips : 0;
-                          const target = acc.targetDailyClips;
+                        {dateRangeList.map((dStr) => {
+                          const today = isToday(dStr);
+                          const rec = records[`${dStr}_${acc.id}`];
+                          const up = rec ? rec.uploadedClips : 0;
+                          const tgt = acc.targetDailyClips;
 
-                          const isMet = target > 0 && uploaded >= target;
-                          const isPartial = target > 0 && uploaded > 0 && uploaded < target;
-                          const isZero = uploaded === 0;
+                          const isMet = tgt > 0 && up >= tgt;
+                          const isPartial = tgt > 0 && up > 0 && up < tgt;
 
                           return (
                             <td
-                              key={dateStr}
-                              onClick={() => onOpenInspector({ dateStr, accountId: acc.id, employeeId: emp.id })}
-                              className={`p-1 text-center cursor-pointer border-r ${
-                                isLight ? 'border-slate-200' : 'border-slate-800/60'
-                              } ${
-                                today ? (isLight ? 'bg-emerald-50/50' : 'bg-emerald-950/15') : ''
+                              key={dStr}
+                              onClick={() => onOpenInspector({ dateStr: dStr, accountId: acc.id, employeeId: emp.id })}
+                              className={`px-1.5 py-1 text-center cursor-pointer ${
+                                today ? (isLight ? 'bg-blue-50/30' : 'bg-zinc-800/10') : ''
                               }`}
                             >
                               <div
-                                className={`h-7 w-full rounded flex items-center justify-center transition-all ${
+                                className={`mx-auto w-11 h-6 rounded flex items-center justify-center text-[11px] font-semibold tabular-nums transition-transform hover:scale-105 ${
                                   isMet
-                                    ? isLight
-                                      ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                                      : 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40'
+                                    ? isLight 
+                                      ? 'bg-[#DCFCE7] text-[#15803D]' 
+                                      : 'bg-emerald-950/50 text-emerald-400 border border-emerald-500/25'
                                     : isPartial
-                                      ? isLight
-                                        ? 'bg-amber-500 text-white font-bold shadow-xs'
-                                        : 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40'
-                                      : isLight
-                                        ? 'bg-slate-100 text-slate-400 hover:text-slate-700'
-                                        : 'bg-slate-900/50 text-slate-500 hover:text-slate-300'
+                                      ? isLight 
+                                        ? 'bg-[#FFEDD5] text-[#C2410C]' 
+                                        : 'bg-amber-950/50 text-amber-400 border border-amber-500/25'
+                                      : 'bg-transparent text-zinc-500'
                                 }`}
-                                title={`${acc.username} on ${dateStr}: ${uploaded}/${target} clips`}
                               >
-                                <span className="tabular-nums font-mono text-[11px]">
-                                  {uploaded > 0 ? `${uploaded}/${target}` : '-'}
-                                </span>
+                                {up > 0 ? `${up}/${tgt}` : '-'}
                               </div>
                             </td>
                           );
                         })}
 
                         {/* Account Total */}
-                        <td className={`px-3 py-1.5 text-center border-l font-mono tabular-nums ${
-                          isLight ? 'border-slate-200 text-slate-600' : 'border-slate-800 text-slate-400'
-                        }`}>
-                          {accPeriodUploaded}
+                        <td className="px-3 py-1.5 text-center font-bold text-xs tabular-nums text-slate-700 dark:text-zinc-400">
+                          {accPeriodUp}
                         </td>
 
-                        {/* Account Quota Met */}
-                        <td className={`px-3 py-1.5 text-center border-l font-mono tabular-nums ${
-                          isLight ? 'border-slate-200' : 'border-slate-800'
-                        }`}>
-                          <span className={accQuotaPct >= 80 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400'}>
-                            {accQuotaPct}%
-                          </span>
-                        </td>
-
-                        <td className={`px-3 py-1.5 text-center border-l text-slate-400 ${
-                          isLight ? 'border-slate-200' : 'border-slate-800'
-                        }`}>
-                          -
+                        {/* Account Consistency */}
+                        <td className="px-4 py-1.5 text-center">
+                          {renderConsistencyRing(accConsistencyPct)}
                         </td>
                       </tr>
                     );
                   })}
+
                 </React.Fragment>
               );
             })}
-
-            {/* Unassigned Pages Section */}
-            {unassignedAccounts.length > 0 && (
-              <React.Fragment>
-                {/* Unassigned Section Divider Header */}
-                <tr className={isLight ? 'bg-amber-50 border-t-2 border-amber-300' : 'bg-amber-950/20 border-t-2 border-amber-500/30'}>
-                  <td
-                    colSpan={dateRangeList.length + 4}
-                    className={`px-4 py-2.5 text-xs font-bold ${isLight ? 'text-amber-900' : 'text-amber-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-500" />
-                        <span>Unassigned Accounts ({unassignedAccounts.length})</span>
-                        <span className={`text-[11px] font-normal ${isLight ? 'text-amber-700' : 'text-amber-400/70'}`}>
-                          These pages have no active creator assigned
-                        </span>
-                      </div>
-                      <button
-                        onClick={onAddAccount}
-                        className="text-[11px] text-amber-600 dark:text-amber-300 hover:underline flex items-center gap-1 font-semibold"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add New Page</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-
-                {unassignedAccounts.map((acc) => {
-                  let accPeriodUploaded = 0;
-                  dateRangeList.forEach((dateStr) => {
-                    const rec = records[`${dateStr}_${acc.id}`];
-                    accPeriodUploaded += rec ? rec.uploadedClips : 0;
-                  });
-
-                  return (
-                    <tr
-                      key={acc.id}
-                      className={`transition-colors text-xs border-t ${
-                        isLight 
-                          ? 'bg-white hover:bg-slate-50 border-slate-200' 
-                          : 'bg-slate-950/40 hover:bg-slate-900/60 border-slate-800/60'
-                      }`}
-                    >
-                      {/* Left Sticky Column with Assign Editor dropdown */}
-                      <td className={`sticky left-0 z-10 px-4 py-2.5 border-r shadow-[2px_0_5px_rgba(0,0,0,0.06)] ${
-                        isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
-                      }`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 truncate">
-                            <Instagram className="w-4 h-4 text-slate-400 shrink-0" />
-                            <div className="truncate">
-                              <div className={`font-bold truncate ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
-                                {acc.username}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                Target: {acc.targetDailyClips}/day
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Quick Assign Dropdown */}
-                          <select
-                            defaultValue=""
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                onAssignAccount(acc.id, e.target.value);
-                              }
-                            }}
-                            className={`text-[11px] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer ${
-                              isLight 
-                                ? 'bg-slate-100 border border-slate-300 text-slate-800' 
-                                : 'bg-slate-950 border border-slate-700/80 text-slate-300'
-                            }`}
-                          >
-                            <option value="" disabled>
-                              + Assign Editor
-                            </option>
-                            {employees.map((e) => (
-                              <option key={e.id} value={e.id}>
-                                {e.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </td>
-
-                      {/* Unassigned Date Cells */}
-                      {dateRangeList.map((dateStr) => {
-                        const today = isToday(dateStr);
-                        const rec = records[`${dateStr}_${acc.id}`];
-                        const uploaded = rec ? rec.uploadedClips : 0;
-                        const target = acc.targetDailyClips;
-                        const isMet = target > 0 && uploaded >= target;
-                        const isPartial = target > 0 && uploaded > 0 && uploaded < target;
-
-                        return (
-                          <td
-                            key={dateStr}
-                            onClick={() => onOpenInspector({ dateStr, accountId: acc.id })}
-                            className={`p-1 text-center cursor-pointer border-r ${
-                              isLight ? 'border-slate-200' : 'border-slate-800/60'
-                            } ${
-                              today ? (isLight ? 'bg-emerald-50/50' : 'bg-emerald-950/15') : ''
-                            }`}
-                          >
-                            <div
-                              className={`h-7 w-full rounded flex items-center justify-center transition-all ${
-                                isMet
-                                  ? isLight ? 'bg-emerald-600 text-white font-bold' : 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
-                                  : isPartial
-                                    ? isLight ? 'bg-amber-500 text-white font-bold' : 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
-                                    : isLight ? 'bg-slate-100 text-slate-400' : 'bg-slate-950 text-slate-600 hover:text-slate-400'
-                              }`}
-                            >
-                              <span className="tabular-nums font-mono text-[11px]">
-                                {uploaded > 0 ? `${uploaded}/${target}` : '-'}
-                              </span>
-                            </div>
-                          </td>
-                        );
-                      })}
-
-                      <td className={`px-3 py-2 text-center border-l font-mono tabular-nums ${
-                        isLight ? 'border-slate-200 text-slate-700' : 'border-slate-800 text-slate-300'
-                      }`}>
-                        {accPeriodUploaded}
-                      </td>
-
-                      <td className={`px-3 py-2 text-center border-l text-slate-400 ${
-                        isLight ? 'border-slate-200' : 'border-slate-800'
-                      }`}>
-                        -
-                      </td>
-
-                      <td className={`px-3 py-2 text-center border-l text-slate-400 ${
-                        isLight ? 'border-slate-200' : 'border-slate-800'
-                      }`}>
-                        -
-                      </td>
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            )}
-
-            {filteredEmployees.length === 0 && unassignedAccounts.length === 0 && (
-              <tr>
-                <td
-                  colSpan={dateRangeList.length + 4}
-                  className="px-6 py-12 text-center text-slate-400 text-xs"
-                >
-                  No team members or Instagram accounts match your filter.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
-      </div>
-
-      {/* Grid Footer Summary Info */}
-      <div className={`px-5 py-2.5 border-t flex flex-wrap items-center justify-between text-xs ${
-        isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-950 border-slate-800 text-slate-400'
-      }`}>
-        <div>
-          Showing <span className={`font-bold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>{filteredEmployees.length}</span> creators ·{' '}
-          <span className={`font-bold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>{campaignFilteredAccounts.length}</span> accounts
-        </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Real-time persistence enabled · Auto-synced</span>
-        </div>
       </div>
 
     </div>

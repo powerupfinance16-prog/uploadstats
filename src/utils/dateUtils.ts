@@ -59,7 +59,19 @@ export function getDateRangeList(rangeType: DateRangeType, refDateStr: string = 
   const refDate = parseDateString(refDateStr);
   const dates: string[] = [];
 
-  if (rangeType === '7') {
+  if (rangeType === '3') {
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(refDate);
+      d.setDate(refDate.getDate() - i);
+      dates.push(toDateString(d));
+    }
+  } else if (rangeType === '4') {
+    for (let i = 3; i >= 0; i--) {
+      const d = new Date(refDate);
+      d.setDate(refDate.getDate() - i);
+      dates.push(toDateString(d));
+    }
+  } else if (rangeType === '7') {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(refDate);
       d.setDate(refDate.getDate() - i);

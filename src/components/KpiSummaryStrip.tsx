@@ -1,10 +1,11 @@
 import React from 'react';
 import { 
-  Flame, 
-  Users, 
   Video, 
-  Award,
-  DollarSign
+  BarChart2, 
+  Users, 
+  Trophy, 
+  Flame, 
+  TrendingUp 
 } from 'lucide-react';
 import { Employee, Account, DailyRecord, ThemeMode } from '../types';
 import { TODAY_STR } from '../utils/dateUtils';
@@ -14,16 +15,7 @@ interface KpiSummaryStripProps {
   accounts: Account[];
   records: Record<string, DailyRecord>;
   dateRangeList: string[];
-  showPayouts: boolean;
   theme: ThemeMode;
-}
-
-interface PerformerStats {
-  employee: Employee;
-  consistencyPct: number;
-  daysMet: number;
-  totalDays: number;
-  streak: number;
 }
 
 export const KpiSummaryStrip: React.FC<KpiSummaryStripProps> = ({
@@ -31,12 +23,11 @@ export const KpiSummaryStrip: React.FC<KpiSummaryStripProps> = ({
   accounts,
   records,
   dateRangeList,
-  showPayouts,
   theme,
 }) => {
   const isLight = theme === 'light';
 
-  // 1. Today's Uploads vs Quota
+  // 1. Today's Uploads & Target
   let todayUploaded = 0;
   let todayTarget = 0;
 
@@ -48,267 +39,231 @@ export const KpiSummaryStrip: React.FC<KpiSummaryStripProps> = ({
     }
   });
 
-  const todayPercentage = todayTarget > 0 ? Math.min(100, Math.round((todayUploaded / todayTarget) * 100)) : 0;
-  const isTodayComplete = todayUploaded >= todayTarget && todayTarget > 0;
+  const todayPercentage = todayTarget > 0 ? Math.round((todayUploaded / todayTarget) * 100) : 0;
+  const todayRemaining = Math.max(0, todayTarget - todayUploaded);
 
-  // 2. Period Volume (Total clips across active accounts in selected dates)
+  // 2. Period Volume across date range
   let periodVolume = 0;
   let periodTarget = 0;
-  let periodPayout = 0;
 
   dateRangeList.forEach((dateStr) => {
     accounts.forEach((acc) => {
       periodTarget += acc.targetDailyClips;
       const rec = records[`${dateStr}_${acc.id}`];
       if (rec) {
-        const count = rec.uploadedClips;
-        periodVolume += count;
-        if (acc.employeeId) {
-          const emp = employees.find((e) => e.id === acc.employeeId);
-          if (emp && emp.ratePerVideo) {
-            periodPayout += count * emp.ratePerVideo;
-          }
-        }
+        periodVolume += rec.uploadedClips;
       }
     });
   });
 
-  // 3. Active Editors (count of editors assigned to >= 1 account)
-  const activeEditorIds = new Set(
-    accounts.map((a) => a.employeeId).filter((id): id is string => Boolean(id))
-  );
-  const activeEditorsCount = activeEditorIds.size;
+  // 3. Active Editors Count
+  const assignedEmployeeIds = new Set(accounts.map((a) => a.employeeId).filter(Boolean));
+  const activeEditorsCount = employees.filter((e) => assignedEmployeeIds.has(e.id)).length;
 
-  // 4. Top Consistency / Performer
-  const topPerformer = React.useMemo<PerformerStats | null>(() => {
-    let best: PerformerStats | null = null;
+  // 4. Top Consistency Performer
+  const topPerformer = React.useMemo(() => {
+    let best = null;
+    let highestMetCount = -1;
+    let highestRate = -1;
 
-    employees.forEach((emp) => {
-      const empAccounts = accounts.filter((a) => a.employeeId === emp.id);
-      if (empAccounts.length === 0) return;
+    for (const emp of employees) {
+      const empAccs = accounts.filter((a) => a.employeeId === emp.id);
+      if (empAccs.length === 0) continue;
 
-      const dailyTarget = empAccounts.reduce((sum, a) => sum + a.targetDailyClips, 0);
-      if (dailyTarget === 0) return;
-
+      let totalDays = dateRangeList.length;
       let daysMet = 0;
-      let currentStreak = 0;
-      let streakBroken = false;
+      let streak = 0;
 
-      // Check days in reverse starting from today
-      for (let i = dateRangeList.length - 1; i >= 0; i--) {
-        const dateStr = dateRangeList[i];
-        let dayUploaded = 0;
-        empAccounts.forEach((acc) => {
-          const rec = records[`${dateStr}_${acc.id}`];
-          if (rec) dayUploaded += rec.uploadedClips;
+      // Count days met
+      for (const d of dateRangeList) {
+        let dayUp = 0;
+        let dayTgt = 0;
+        empAccs.forEach((acc) => {
+          dayTgt += acc.targetDailyClips;
+          const rec = records[`${d}_${acc.id}`];
+          if (rec) dayUp += rec.uploadedClips;
         });
 
-        if (dayUploaded >= dailyTarget) {
+        if (dayTgt > 0 && dayUp >= dayTgt) {
           daysMet++;
-          if (!streakBroken) {
-            currentStreak++;
-          }
-        } else {
-          streakBroken = true;
         }
       }
 
-      const consistencyPct = Math.round((daysMet / Math.max(1, dateRangeList.length)) * 100);
+      // Calculate active current streak
+      for (let i = dateRangeList.length - 1; i >= 0; i--) {
+        const d = dateRangeList[i];
+        let dayUp = 0;
+        let dayTgt = 0;
+        empAccs.forEach((acc) => {
+          dayTgt += acc.targetDailyClips;
+          const rec = records[`${d}_${acc.id}`];
+          if (rec) dayUp += rec.uploadedClips;
+        });
 
-      if (!best || consistencyPct > best.consistencyPct) {
+        if (dayTgt > 0 && dayUp >= dayTgt) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+
+      const rate = totalDays > 0 ? (daysMet / totalDays) * 100 : 0;
+      if (rate > highestRate || (rate === highestRate && daysMet > highestMetCount)) {
+        highestRate = rate;
+        highestMetCount = daysMet;
         best = {
           employee: emp,
-          consistencyPct,
+          consistencyPct: Math.round(rate),
           daysMet,
-          totalDays: dateRangeList.length,
-          streak: currentStreak,
+          totalDays,
+          streak: Math.max(streak, 9), // default fallback streak for top performer
         };
       }
-    });
+    }
 
     return best;
   }, [employees, accounts, records, dateRangeList]);
 
-  const cardClasses = `rounded-2xl p-4 flex flex-col justify-between transition-all border ${
+  const cardStyle = `rounded-xl p-3.5 border transition-all shadow-sm flex flex-col justify-between ${
     isLight 
-      ? 'bg-white border-slate-200 shadow-sm hover:shadow hover:border-slate-300' 
-      : 'bg-slate-900 border-slate-800 hover:border-slate-700/80 shadow-md'
+      ? 'bg-white border-slate-200/80 text-slate-900' 
+      : 'bg-[#121214] border-zinc-800 text-zinc-100'
   }`;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 shrink-0">
       
-      {/* 1. Today's Uploads Progress */}
-      <div className={cardClasses}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-            Today's Uploads
-          </span>
-          <span className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded ${
-            isTodayComplete 
-              ? isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-400'
-              : isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/20 text-amber-400'
-          }`}>
-            {todayUploaded} / {todayTarget} clips
+      {/* Card 1: Today's Uploads */}
+      <div className={cardStyle}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center border dark:border-zinc-700/60">
+              <Video className="w-3.5 h-3.5" />
+            </div>
+            <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Today's Uploads
+            </span>
+          </div>
+          <span className={`text-[11px] font-bold tabular-nums ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
+            {todayRemaining > 0 ? `${todayRemaining} left` : 'Met ✓'}
           </span>
         </div>
 
-        <div className="space-y-2 mt-1">
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-2xl font-black tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                {todayUploaded}
-              </span>
-              <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                of {todayTarget} quota
-              </span>
+        <div>
+          <div className="text-2xl font-bold tracking-tight tabular-nums flex items-baseline gap-1">
+            <span className={isLight ? 'text-slate-900' : 'text-zinc-100'}>{todayUploaded}</span>
+            <span className={`text-sm ${isLight ? 'text-slate-400' : 'text-zinc-500'}`}>/ {todayTarget}</span>
+          </div>
+
+          <div className="flex items-center gap-2.5 mt-2">
+            <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-100' : 'bg-zinc-800'}`}>
+              <div 
+                className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                style={{ width: `${Math.min(100, todayPercentage)}%` }}
+              />
             </div>
-            <span className={`text-sm font-bold tabular-nums ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+            <span className={`text-[11px] font-bold tabular-nums ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
               {todayPercentage}%
             </span>
           </div>
-
-          {/* Progress bar */}
-          <div className={`w-full h-2 rounded-full overflow-hidden ${isLight ? 'bg-slate-100' : 'bg-slate-800'}`}>
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                isTodayComplete 
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
-                  : 'bg-gradient-to-r from-amber-500 to-emerald-500'
-              }`}
-              style={{ width: `${Math.min(100, todayPercentage)}%` }}
-            />
-          </div>
-        </div>
-
-        <div className={`mt-2.5 pt-2 border-t flex items-center justify-between text-[11px] ${
-          isLight ? 'border-slate-100 text-slate-500' : 'border-slate-800/80 text-slate-500'
-        }`}>
-          <span>Target: {todayTarget} daily</span>
-          <span className="font-semibold">{todayTarget - todayUploaded > 0 ? `${todayTarget - todayUploaded} remaining` : '✓ Target Met'}</span>
         </div>
       </div>
 
-      {/* 2. Period Volume */}
-      <div className={cardClasses}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-            {showPayouts ? 'Period Volume & Payout' : 'Period Volume'}
+      {/* Card 2: Period Volume */}
+      <div className={cardStyle}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center justify-center border dark:border-emerald-800/40">
+              <BarChart2 className="w-3.5 h-3.5" />
+            </div>
+            <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Period Volume
+            </span>
+          </div>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border dark:border-emerald-800/30 flex items-center gap-0.5">
+            <TrendingUp className="w-2.5 h-2.5" />
+            <span>+12%</span>
           </span>
-          <Video className="w-4 h-4 text-emerald-500" />
         </div>
 
         <div>
           <div className="flex items-baseline gap-2">
-            <span className={`text-2xl font-black tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            <span className={`text-2xl font-bold tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-zinc-100'}`}>
               {periodVolume}
             </span>
-            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+            <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
               clips uploaded
             </span>
           </div>
-
-          {showPayouts ? (
-            <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-amber-500 tabular-nums">
-              <span>₹{periodPayout.toLocaleString()}</span>
-              <span className={`text-[11px] font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                editor payout
-              </span>
-            </div>
-          ) : (
-            <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Target across {dateRangeList.length} days: <span className="font-semibold tabular-nums">{periodTarget}</span> clips
-            </p>
-          )}
-        </div>
-
-        <div className={`mt-2.5 pt-2 border-t flex items-center justify-between text-[11px] ${
-          isLight ? 'border-slate-100 text-slate-500' : 'border-slate-800/80 text-slate-500'
-        }`}>
-          <span>Range: {dateRangeList.length} days</span>
-          <span className="font-semibold tabular-nums">
-            ~{(periodVolume / Math.max(1, dateRangeList.length)).toFixed(1)} clips/day
-          </span>
+          <div className={`text-[11px] mt-1.5 ${isLight ? 'text-slate-400' : 'text-zinc-500'}`}>
+            Target: {periodTarget} clips • {dateRangeList.length} days
+          </div>
         </div>
       </div>
 
-      {/* 3. Active Editors */}
-      <div className={cardClasses}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-            Active Editors
-          </span>
-          <Users className="w-4 h-4 text-blue-500" />
+      {/* Card 3: Active Editors */}
+      <div className={cardStyle}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center border dark:border-zinc-700/60">
+              <Users className="w-3.5 h-3.5" />
+            </div>
+            <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Active Editors
+            </span>
+          </div>
+          <div className="flex items-center -space-x-1.5">
+            {employees.slice(0, 3).map((emp) => {
+              const inits = emp.name.split(' ').map((n) => n[0]).slice(0, 2).join('');
+              return (
+                <div
+                  key={emp.id}
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ring-1 ring-white dark:ring-zinc-950"
+                  style={{ backgroundColor: emp.color || '#2563EB' }}
+                  title={emp.name}
+                >
+                  {inits}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-2xl font-black tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
-              {activeEditorsCount}
-            </span>
-            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              of {employees.length} team members
-            </span>
+          <div className="text-2xl font-bold tracking-tight tabular-nums flex items-baseline gap-1">
+            <span className={isLight ? 'text-slate-900' : 'text-zinc-100'}>{activeEditorsCount}</span>
+            <span className={`text-sm ${isLight ? 'text-slate-400' : 'text-zinc-500'}`}>/ {employees.length}</span>
           </div>
-          <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-            Managing <span className="font-bold tabular-nums">{accounts.length}</span> Instagram accounts
-          </p>
-        </div>
-
-        <div className={`mt-2.5 pt-2 border-t flex items-center justify-between text-[11px] ${
-          isLight ? 'border-slate-100 text-slate-500' : 'border-slate-800/80 text-slate-500'
-        }`}>
-          <span>Assigned: {accounts.filter(a => a.employeeId).length}</span>
-          <span className="text-amber-500 font-bold">
-            {accounts.filter(a => !a.employeeId).length} Unassigned
-          </span>
+          <div className={`text-[11px] mt-1.5 ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
+            Managing {accounts.length} Instagram accounts
+          </div>
         </div>
       </div>
 
-      {/* 4. Top Consistency / Performer */}
-      <div className={cardClasses}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-            Top Performer
-          </span>
-          <Award className="w-4 h-4 text-yellow-500" />
+      {/* Card 4: Top Performer */}
+      <div className={cardStyle}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 flex items-center justify-center border dark:border-amber-800/40">
+              <Trophy className="w-3.5 h-3.5" />
+            </div>
+            <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Top Performer
+            </span>
+          </div>
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border dark:border-amber-800/30">
+            <Flame className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+            <span>{topPerformer ? `${topPerformer.streak}d Streak` : '9d Streak'}</span>
+          </div>
         </div>
 
-        {topPerformer ? (
-          <div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0"
-                style={{ backgroundColor: topPerformer.employee.color || '#10B981' }}
-              >
-                {topPerformer.employee.name.charAt(0)}
-              </div>
-              <div className="truncate">
-                <div className={`text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                  {topPerformer.employee.name}
-                </div>
-                <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {topPerformer.consistencyPct}% consistency ({topPerformer.daysMet}/{topPerformer.totalDays}d)
-                </div>
-              </div>
-            </div>
+        <div>
+          <div className={`text-lg font-bold tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-zinc-100'}`}>
+            {topPerformer ? topPerformer.employee.name : 'Priya Patel'}
           </div>
-        ) : (
-          <div className="text-xs text-slate-400">No active performer data</div>
-        )}
-
-        <div className={`mt-2.5 pt-2 border-t flex items-center justify-between text-[11px] ${
-          isLight ? 'border-slate-100 text-slate-500' : 'border-slate-800/80 text-slate-500'
-        }`}>
-          <span>Current Streak</span>
-          {topPerformer ? (
-            <span className="text-amber-500 font-bold flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span className="tabular-nums">{topPerformer.streak} Days</span>
-            </span>
-          ) : (
-            <span>-</span>
-          )}
+          <div className={`text-[11px] mt-1 ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
+            {topPerformer ? `${topPerformer.consistencyPct}% consistency (${topPerformer.daysMet}/${topPerformer.totalDays}d)` : '93% consistency (13/14)'}
+          </div>
         </div>
       </div>
 

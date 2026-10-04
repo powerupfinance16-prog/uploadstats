@@ -65,7 +65,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         }`}>
           <div className="flex items-center gap-2.5">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
-              isLight ? 'bg-emerald-50 border-emerald-300 text-emerald-600' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+              isLight ? 'bg-sky-50 border-sky-200 text-sky-600' : 'bg-sky-500/10 border-sky-500/25 text-sky-400'
             }`}>
               <MessageSquare className="w-4 h-4" />
             </div>
@@ -101,7 +101,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           <select
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className={`text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer ${
+            className={`text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer ${
               isLight 
                 ? 'bg-white border border-slate-300 text-slate-800' 
                 : 'bg-slate-900 border border-slate-700 text-slate-200'
@@ -118,21 +118,21 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         {/* WhatsApp Preview Box */}
         <div className="p-6">
           <div className="relative">
-            <pre className={`p-4 rounded-xl text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto selection:bg-emerald-500/30 border ${
+            <pre className={`p-4 rounded-xl text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto selection:bg-sky-500/20 border ${
               isLight 
-                ? 'bg-slate-900 border-slate-800 text-emerald-400' 
-                : 'bg-slate-950 border-slate-800/90 text-emerald-400'
+                ? 'bg-slate-900 border-slate-800 text-sky-300' 
+                : 'bg-slate-950 border-slate-800/90 text-sky-300'
             }`}>
               {reportText}
             </pre>
 
             <button
               onClick={handleCopy}
-              className="absolute top-2.5 right-2.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+              className="absolute top-2.5 right-2.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-500 transition-all flex items-center gap-1.5 shadow-sm shadow-sky-600/30"
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                   <span>Copied!</span>
                 </>
               ) : (
@@ -157,7 +157,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1.5 transition-colors"
+            className="text-xs font-semibold text-sky-400 hover:underline flex items-center gap-1.5 transition-colors"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>Open WhatsApp Web</span>
@@ -167,7 +167,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 isLight 
                   ? 'text-slate-700 bg-slate-200 hover:bg-slate-300' 
                   : 'text-slate-300 bg-slate-800 hover:bg-slate-700'
@@ -177,7 +177,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </button>
             <button
               onClick={handleCopy}
-              className="px-4 py-1.5 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>{copied ? 'Copied!' : 'Copy to Clipboard'}</span>
